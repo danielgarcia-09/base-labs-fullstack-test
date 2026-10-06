@@ -16,6 +16,13 @@ export async function GET(request: Request): Promise<NextResponse> {
     );
   }
 
+  if (endAt <= startAt) {
+    return NextResponse.json(
+      { error: "endAt must be after startAt.", code: "VALIDATION_ERROR" },
+      { status: 400 },
+    );
+  }
+
   try {
     const availability = await listAvailability({
       locationId,

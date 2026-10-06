@@ -1,15 +1,21 @@
 import { z } from "zod";
 
-const TIMEZONE_SUFFIX = /(Z|[+-]\d{2}:?\d{2})$/i;
+// "YYYY-MM-DDTHH:mm", optional seconds and milliseconds, optional "Z" or "+HH:mm" offset.
+const ISO_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})?$/i;
 
 /**
  * Parses a form `datetime-local` value ("2027-09-20T09:00") or an ISO string.
  * Values without an explicit offset are interpreted as UTC, matching how the
- * app displays every time.
+ * app displays every time. Anything that is not ISO 8601 gives an Invalid Date,
+ * so parsing never depends on the JavaScript engine's lenient fallbacks.
  */
 export function parseUtcDateTime(value: string): Date {
   const trimmed = value.trim();
-  return new Date(TIMEZONE_SUFFIX.test(trimmed) ? trimmed : `${trimmed}Z`);
+  const match = ISO_DATE_TIME.exec(trimmed);
+  if (!match) {
+    return new Date(Number.NaN);
+  }
+  return new Date(match[1] ? trimmed : `${trimmed}Z`);
 }
 
 function dateTimeField(label: string) {

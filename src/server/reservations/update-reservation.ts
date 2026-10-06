@@ -7,7 +7,7 @@ export async function updateReservation(
   reservationId: string,
   input: UpdateReservationInput,
 ): Promise<{ id: string }> {
-  const startAt = parseUtcDateTime(input.startAt);
+  let startAt = parseUtcDateTime(input.startAt);
   const endAt = parseUtcDateTime(input.endAt);
 
   return prisma.$transaction(async (tx) => {
@@ -18,6 +18,14 @@ export async function updateReservation(
 
     if (!existing) {
       throw new DomainError("Reservation not found.", 404, "RESERVATION_NOT_FOUND");
+    }
+
+    // The form only has minute precision, so a start equal to the stored one at that
+    // precision is "unchanged": keep the stored value (and its seconds) as is.
+    const existingMinute = new Date(existing.startAt);
+    existingMinute.setUTCSeconds(0, 0);
+    if (startAt.getTime() === existingMinute.getTime()) {
+      startAt = existing.startAt;
     }
 
     // A reservation that already started may be edited, but its start cannot be moved

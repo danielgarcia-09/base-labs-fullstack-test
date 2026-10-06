@@ -15,12 +15,10 @@ import {
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
+import { sendJson } from "@/lib/api-client";
+import { formatUtcShortDateTime } from "@/lib/date-time";
 import { reservationNoteSchema, type ReservationNoteInput } from "@/schemas/reservation-note";
 import type { ReservationListItem } from "@/types/reservation";
-
-interface ApiErrorBody {
-  error?: string;
-}
 
 export function ReservationNoteDialog({
   reservation,
@@ -43,24 +41,20 @@ export function ReservationNoteDialog({
   async function onSubmit(input: ReservationNoteInput) {
     setServerError(null);
 
-    try {
-      const response = await fetch(`/api/reservations/${reservation.id}/note`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(input),
-      });
-      const body = (await response.json()) as ApiErrorBody;
+    const result = await sendJson(
+      `/api/reservations/${reservation.id}/note`,
+      "PUT",
+      input,
+      "The note could not be saved.",
+    );
 
-      if (!response.ok) {
-        setServerError(body.error ?? "The note could not be saved.");
-        return;
-      }
-
-      onClose();
-      router.refresh();
-    } catch {
-      setServerError("The server could not be reached. Please try again.");
+    if (!result.ok) {
+      setServerError(result.message);
+      return;
     }
+
+    onClose();
+    router.refresh();
   }
 
   return (
@@ -70,7 +64,7 @@ export function ReservationNoteDialog({
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 0.5 }}>
             <Typography color="text.secondary">
-              {reservation.locationName} · {formatShortDate(reservation.startAt)}
+              {reservation.locationName} · {formatUtcShortDateTime(reservation.startAt)}
             </Typography>
             {serverError ? <Alert severity="error">{serverError}</Alert> : null}
             <TextField
@@ -97,14 +91,4 @@ export function ReservationNoteDialog({
       </form>
     </Dialog>
   );
-}
-
-function formatShortDate(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "UTC",
-  }).format(new Date(value));
 }

@@ -1,3 +1,4 @@
+import { toDateTimeLocalValue } from "@/lib/date-time";
 import { prisma } from "@/lib/prisma";
 import type { ReservationEditValues } from "@/types/reservation";
 
@@ -25,8 +26,8 @@ export async function getReservationForEdit(id: string): Promise<ReservationEdit
   return {
     id: reservation.id,
     locationId: reservation.locationId,
-    startAt: reservation.startAt.toISOString().slice(0, 16),
-    endAt: reservation.endAt.toISOString().slice(0, 16),
+    startAt: toDateTimeLocalValue(reservation.startAt),
+    endAt: toDateTimeLocalValue(reservation.endAt),
     status: reservation.status,
     items: reservation.items,
   };

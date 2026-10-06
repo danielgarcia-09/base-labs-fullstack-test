@@ -62,8 +62,10 @@ pnpm dev        # http://localhost:3000
 - **Shared rules:** `src/server/reservations/reservation-rules.ts` holds the location, equipment and availability checks used by both create and update.
 - **One form, two modes:** `ReservationForm` handles create and edit. The edit page is separate, not a dialog, so it has its own URL and a not-found state.
 - **Validation in one place:** the Zod schemas in `src/schemas` are used by the form resolver and by the API routes.
-- **Domain errors:** `DomainError` carries a status and a code, and the routes turn it into JSON. Anything unexpected is logged and returned as a generic 500.
-- **Pickers:** "now" for the picker minimum is computed on the server and passed in, to avoid hydration mismatches. Availability fetches are debounced by one second and stale responses are ignored.
+- **Domain errors:** `DomainError` carries a status and a code. Every route handler goes through `handleRoute` and `parseBody` in `src/lib/api-route.ts`, which turn domain errors, validation failures and bad JSON into JSON responses. Anything unexpected is logged and returned as a generic 500.
+- **Pickers:** "now" for the picker minimum is computed on the server and passed in, to avoid hydration mismatches.
+- **Availability in the form:** `useAvailability` combines `use-debounce` (one second, because the date-time control emits as soon as the hour is picked) with SWR. The form has no data-fetching `useEffect`, and SWR keys results by URL, so a stale response can't be shown for another period.
+- **Date helpers:** `src/lib/date-time.ts` holds the UTC parsing, "current minute", picker-value and display-format helpers used by both server and client.
 
 ## Trade-offs and known limits
 
@@ -71,6 +73,7 @@ pnpm dev        # http://localhost:3000
 - **Client clock:** the "start in the past" rule also runs in the browser against the user's clock. The server is authoritative, so a skewed clock only changes which message the user sees.
 - **Availability queries:** availability runs one query per item. It could be a single grouped query.
 - **Constraints:** there are no database `CHECK` constraints for `quantity > 0` or `end > start`. They are enforced in application code. They would be good defence in depth.
+- **Client bundle size:** the edit and create pages load about 1.3 MB of JavaScript (380 KB gzipped), mostly MUI. In a production build the HTML arrives in about 30 ms, but the form takes about 2 seconds to hydrate and become interactive (measured in the in-app browser). `next dev` is slower still, because it compiles pages on demand. With more time I would inspect the largest chunk with the Next bundle analyzer, import MUI icons and components by specific path, and lazy-load the note dialog on the list page.
 - **No authentication or authorization**, as out of scope.
 - **Stale picker minimum:** the picker minimum is fixed when the page loads. A form left open for a long time still gets correct server-side validation.
 

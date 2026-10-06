@@ -1,5 +1,6 @@
+import { parseUtcDateTime } from "@/lib/date-time";
 import { prisma } from "@/lib/prisma";
-import { parseUtcDateTime, type CreateReservationInput } from "@/schemas/create-reservation";
+import type { CreateReservationInput } from "@/schemas/create-reservation";
 import { assertConfirmedAvailability, assertLocationAndEquipment } from "./reservation-rules";
 
 export async function createReservation(input: CreateReservationInput): Promise<{ id: string }> {

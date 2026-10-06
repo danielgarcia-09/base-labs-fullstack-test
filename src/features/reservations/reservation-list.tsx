@@ -20,22 +20,9 @@ import {
   Typography,
 } from "@mui/material";
 import { useState } from "react";
+import { formatUtcDateTime } from "@/lib/date-time";
 import type { ReservationListItem } from "@/types/reservation";
 import { ReservationNoteDialog } from "./reservation-note-dialog";
-
-const dateFormatter = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-  hour12: false,
-  timeZone: "UTC",
-});
-
-function formatDate(value: string) {
-  return dateFormatter.format(new Date(value));
-}
 
 function formatEquipment(reservation: ReservationListItem) {
   return reservation.equipment.map((item) => `${item.quantity}x ${item.name}`).join(", ");
@@ -74,8 +61,8 @@ export function ReservationList({ reservations }: { reservations: ReservationLis
             {reservations.map((reservation) => (
               <TableRow key={reservation.id} hover>
                 <TableCell sx={{ fontWeight: 600 }}>{reservation.locationName}</TableCell>
-                <TableCell>{formatDate(reservation.startAt)}</TableCell>
-                <TableCell>{formatDate(reservation.endAt)}</TableCell>
+                <TableCell>{formatUtcDateTime(reservation.startAt)}</TableCell>
+                <TableCell>{formatUtcDateTime(reservation.endAt)}</TableCell>
                 <TableCell><StatusChip status={reservation.status} /></TableCell>
                 <TableCell>{formatEquipment(reservation)}</TableCell>
                 <TableCell sx={{ maxWidth: 190 }}>
@@ -87,14 +74,14 @@ export function ReservationList({ reservations }: { reservations: ReservationLis
                   <Tooltip title="Edit reservation">
                     <IconButton
                       href={`/reservations/${reservation.id}/edit`}
-                      aria-label={`Edit reservation for ${reservation.locationName} starting ${formatDate(reservation.startAt)}`}
+                      aria-label={`Edit reservation for ${reservation.locationName} starting ${formatUtcDateTime(reservation.startAt)}`}
                     >
                       <EditCalendarIcon />
                     </IconButton>
                   </Tooltip>
                   <Tooltip title="Edit internal note">
                     <IconButton
-                      aria-label={`Edit note for ${reservation.locationName} reservation starting ${formatDate(reservation.startAt)}`}
+                      aria-label={`Edit note for ${reservation.locationName} reservation starting ${formatUtcDateTime(reservation.startAt)}`}
                       onClick={() => setEditing(reservation)}
                     >
                       <EditNoteIcon />
@@ -118,8 +105,8 @@ export function ReservationList({ reservations }: { reservations: ReservationLis
                 </Box>
                 <Box>
                   <Typography variant="caption" color="text.secondary">Period (UTC)</Typography>
-                  <Typography>{formatDate(reservation.startAt)}</Typography>
-                  <Typography color="text.secondary">to {formatDate(reservation.endAt)}</Typography>
+                  <Typography>{formatUtcDateTime(reservation.startAt)}</Typography>
+                  <Typography color="text.secondary">to {formatUtcDateTime(reservation.endAt)}</Typography>
                 </Box>
                 <Box>
                   <Typography variant="caption" color="text.secondary">Equipment</Typography>

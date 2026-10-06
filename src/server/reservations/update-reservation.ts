@@ -1,6 +1,7 @@
+import { currentUtcMinute, parseUtcDateTime } from "@/lib/date-time";
 import { DomainError } from "@/lib/domain-error";
 import { prisma } from "@/lib/prisma";
-import { parseUtcDateTime, type UpdateReservationInput } from "@/schemas/create-reservation";
+import type { UpdateReservationInput } from "@/schemas/create-reservation";
 import { assertConfirmedAvailability, assertLocationAndEquipment } from "./reservation-rules";
 
 export async function updateReservation(
@@ -30,10 +31,7 @@ export async function updateReservation(
 
     // A reservation that already started may be edited, but its start cannot be moved
     // into the past.
-    const currentMinute = new Date();
-    currentMinute.setUTCSeconds(0, 0);
-
-    if (startAt < currentMinute && startAt.getTime() !== existing.startAt.getTime()) {
+    if (startAt < currentUtcMinute() && startAt.getTime() !== existing.startAt.getTime()) {
       throw new DomainError("Start time cannot be in the past.", 400, "START_IN_PAST");
     }
 

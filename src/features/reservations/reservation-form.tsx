@@ -14,22 +14,32 @@ import {
   Typography,
 } from "@mui/material";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
+import { sendJson } from "@/lib/api-client";
 import {
   createReservationSchema,
   updateReservationSchema,
   type CreateReservationInput,
 } from "@/schemas/create-reservation";
 import type { LocationOption, ReservationEditValues } from "@/types/reservation";
-
-interface ApiErrorBody {
-  error?: string;
-  code?: string;
-}
+import { useAvailability } from "./use-availability";
 
 const EMPTY_ITEM = { equipmentId: "", quantity: 1 };
-const AVAILABILITY_DEBOUNCE_MS = 1000;
+
+function getDefaultValues(reservation?: ReservationEditValues): CreateReservationInput {
+  if (!reservation) {
+    return { locationId: "", startAt: "", endAt: "", status: "DRAFT", items: [EMPTY_ITEM] };
+  }
+
+  return {
+    locationId: reservation.locationId,
+    startAt: reservation.startAt,
+    endAt: reservation.endAt,
+    status: reservation.status,
+    items: reservation.items,
+  };
+}
 
 /** Creates a reservation, or edits one when `reservation` is provided. */
 export function ReservationForm({
@@ -42,7 +52,6 @@ export function ReservationForm({
   minDateTime: string;
   reservation?: ReservationEditValues;
 }) {
-  const now = minDateTime;
   const isEdit = reservation !== undefined;
   const router = useRouter();
   const [serverError, setServerError] = useState<{
@@ -56,21 +65,7 @@ export function ReservationForm({
     formState: { errors, isSubmitting },
   } = useForm<CreateReservationInput>({
     resolver: zodResolver(isEdit ? updateReservationSchema : createReservationSchema),
-    defaultValues: reservation
-      ? {
-          locationId: reservation.locationId,
-          startAt: reservation.startAt,
-          endAt: reservation.endAt,
-          status: reservation.status,
-          items: reservation.items,
-        }
-      : {
-          locationId: "",
-          startAt: "",
-          endAt: "",
-          status: "DRAFT",
-          items: [EMPTY_ITEM],
-        },
+    defaultValues: getDefaultValues(reservation),
   });
   const { fields, append, remove, replace } = useFieldArray({
     control,
@@ -83,92 +78,37 @@ export function ReservationForm({
   const endAt = useWatch({ control, name: "endAt" });
   // New reservations cannot start in the past. An edited one may keep a start that has
   // already passed, so its own start time stays selectable.
-  const startMin = reservation && reservation.startAt < now ? reservation.startAt : now;
-  const endMin = isEdit ? startAt || undefined : startAt && startAt > now ? startAt : now;
+  const startMin = reservation && reservation.startAt < minDateTime ? reservation.startAt : minDateTime;
+  const endMin = isEdit ? startAt || undefined : startAt && startAt > minDateTime ? startAt : minDateTime;
   const equipmentOptions =
     locations.find((location) => location.id === locationId)?.equipment ?? [];
-
-  // Availability depends on the selected period, so it is fetched once location and
-  // a valid interval are chosen. Results are keyed so stale responses are ignored.
-  const [availability, setAvailability] = useState<{
-    key: string;
-    quantities: Record<string, number>;
-  } | null>(null);
-  const availabilityKey =
-    locationId && startAt && endAt && endAt > startAt
-      ? `${locationId}|${startAt}|${endAt}`
-      : null;
-  const reservationId = reservation?.id;
-
-  useEffect(() => {
-    if (!availabilityKey) return;
-
-    const controller = new AbortController();
-    const params = new URLSearchParams({ locationId, startAt, endAt });
-    // When editing, the reservation must not count against its own availability.
-    if (reservationId) params.set("excludeReservationId", reservationId);
-
-    // The date-time control emits a value as soon as the hour is picked, but the user may
-    // still be choosing minutes, so wait for the value to settle before querying.
-    const timer = setTimeout(() => {
-      fetch(`/api/availability?${params}`, { signal: controller.signal })
-        .then((response) => (response.ok ? response.json() : null))
-        .then((body: { availability?: Record<string, number> } | null) => {
-          if (body?.availability) {
-            setAvailability({
-              key: availabilityKey,
-              quantities: body.availability,
-            });
-          }
-        })
-        .catch(() => undefined);
-    }, AVAILABILITY_DEBOUNCE_MS);
-
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [availabilityKey, locationId, startAt, endAt, reservationId]);
-
-  const availableQuantities =
-    availability && availability.key === availabilityKey
-      ? availability.quantities
-      : null;
+  const availableQuantities = useAvailability({
+    locationId,
+    startAt,
+    endAt,
+    excludeReservationId: reservation?.id,
+  });
 
   async function onSubmit(input: CreateReservationInput) {
     setServerError(null);
 
-    try {
-      const response = await fetch(
-        reservation ? `/api/reservations/${reservation.id}` : "/api/reservations",
-        {
-          method: reservation ? "PUT" : "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(input),
-        },
-      );
-      const body = (await response.json()) as ApiErrorBody;
+    const result = await sendJson(
+      reservation ? `/api/reservations/${reservation.id}` : "/api/reservations",
+      reservation ? "PUT" : "POST",
+      input,
+      isEdit ? "The reservation could not be saved." : "The reservation could not be created.",
+    );
 
-      if (!response.ok) {
-        setServerError({
-          message:
-            body.error ??
-            (isEdit
-              ? "The reservation could not be saved."
-              : "The reservation could not be created."),
-          conflict: body.code === "INSUFFICIENT_AVAILABILITY",
-        });
-        return;
-      }
-
-      router.push("/");
-      router.refresh();
-    } catch {
+    if (!result.ok) {
       setServerError({
-        message: "The server could not be reached. Please try again.",
-        conflict: false,
+        message: result.message,
+        conflict: result.code === "INSUFFICIENT_AVAILABILITY",
       });
+      return;
     }
+
+    router.push("/");
+    router.refresh();
   }
 
   if (locations.length === 0) {

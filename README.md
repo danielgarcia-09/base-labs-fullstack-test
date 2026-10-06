@@ -10,6 +10,8 @@ Take-home solution for the Base Labs Senior Full Stack Developer assessment. Bui
 | Ticket 2: create reservation (UI, API, persistence, availability enforcement) | Done |
 | Optional: edit reservation | Done |
 
+Video demonstration: https://drive.google.com/file/d/1oSjK4-vsm-f1y2Kc1dJBiVkzpRxz-NLF/view?usp=sharing
+
 ## Setup
 
 Requirements: Node 22 (`.nvmrc`) and pnpm 11.

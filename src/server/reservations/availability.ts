@@ -30,13 +30,14 @@ export async function getAvailableQuantity(input: AvailabilityInput): Promise<nu
     );
   }
 
-  // Availability behavior is part of the candidate challenge.
+  // Intervals are [start, end): two ranges overlap only when each starts strictly
+  // before the other ends, so adjacent reservations do not conflict.
   const reservations = await prisma.reservation.findMany({
     where: {
       locationId: input.locationId,
       status: "CONFIRMED",
-      startAt: { lte: input.endAt },
-      endAt: { gte: input.startAt },
+      startAt: { lt: input.endAt },
+      endAt: { gt: input.startAt },
       items: { some: { equipmentId: input.equipmentId } },
     },
     select: {

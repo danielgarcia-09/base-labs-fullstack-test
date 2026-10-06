@@ -6,6 +6,8 @@ export async function listAvailability(input: {
   locationId: string;
   startAt: Date;
   endAt: Date;
+  /** Reservation being edited, so it does not count against its own availability. */
+  excludeReservationId?: string;
 }): Promise<Record<string, number>> {
   const equipment = await prisma.equipment.findMany({
     where: { locationId: input.locationId },

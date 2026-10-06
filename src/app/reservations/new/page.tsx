@@ -1,6 +1,6 @@
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { Box, Button, Card, CardContent, Stack, Typography } from "@mui/material";
-import { CreateReservationForm } from "@/features/reservations/create-reservation-form";
+import { ReservationForm } from "@/features/reservations/reservation-form";
 import { listLocationOptions } from "@/server/reservations/list-locations";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +25,7 @@ export default async function NewReservationPage() {
 
       <Card>
         <CardContent>
-          <CreateReservationForm locations={locations} minDateTime={new Date().toISOString().slice(0, 16)} />
+          <ReservationForm locations={locations} minDateTime={new Date().toISOString().slice(0, 16)} />
         </CardContent>
       </Card>
     </Stack>

@@ -18,9 +18,10 @@ import { useEffect, useState } from "react";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import {
   createReservationSchema,
+  updateReservationSchema,
   type CreateReservationInput,
 } from "@/schemas/create-reservation";
-import type { LocationOption } from "@/types/reservation";
+import type { LocationOption, ReservationEditValues } from "@/types/reservation";
 
 interface ApiErrorBody {
   error?: string;
@@ -30,15 +31,19 @@ interface ApiErrorBody {
 const EMPTY_ITEM = { equipmentId: "", quantity: 1 };
 const AVAILABILITY_DEBOUNCE_MS = 1000;
 
-export function CreateReservationForm({
+/** Creates a reservation, or edits one when `reservation` is provided. */
+export function ReservationForm({
   locations,
   minDateTime,
+  reservation,
 }: {
   locations: LocationOption[];
   /** Earliest selectable time as a UTC "YYYY-MM-DDTHH:mm" string (the current minute). */
   minDateTime: string;
+  reservation?: ReservationEditValues;
 }) {
   const now = minDateTime;
+  const isEdit = reservation !== undefined;
   const router = useRouter();
   const [serverError, setServerError] = useState<{
     message: string;
@@ -50,14 +55,22 @@ export function CreateReservationForm({
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<CreateReservationInput>({
-    resolver: zodResolver(createReservationSchema),
-    defaultValues: {
-      locationId: "",
-      startAt: "",
-      endAt: "",
-      status: "DRAFT",
-      items: [EMPTY_ITEM],
-    },
+    resolver: zodResolver(isEdit ? updateReservationSchema : createReservationSchema),
+    defaultValues: reservation
+      ? {
+          locationId: reservation.locationId,
+          startAt: reservation.startAt,
+          endAt: reservation.endAt,
+          status: reservation.status,
+          items: reservation.items,
+        }
+      : {
+          locationId: "",
+          startAt: "",
+          endAt: "",
+          status: "DRAFT",
+          items: [EMPTY_ITEM],
+        },
   });
   const { fields, append, remove, replace } = useFieldArray({
     control,
@@ -68,7 +81,10 @@ export function CreateReservationForm({
   const items = useWatch({ control, name: "items" });
   const startAt = useWatch({ control, name: "startAt" });
   const endAt = useWatch({ control, name: "endAt" });
-  const endMin = startAt && startAt > now ? startAt : now;
+  // New reservations cannot start in the past. An edited one may keep a start that has
+  // already passed, so its own start time stays selectable.
+  const startMin = reservation && reservation.startAt < now ? reservation.startAt : now;
+  const endMin = isEdit ? startAt || undefined : startAt && startAt > now ? startAt : now;
   const equipmentOptions =
     locations.find((location) => location.id === locationId)?.equipment ?? [];
 
@@ -82,12 +98,15 @@ export function CreateReservationForm({
     locationId && startAt && endAt && endAt > startAt
       ? `${locationId}|${startAt}|${endAt}`
       : null;
+  const reservationId = reservation?.id;
 
   useEffect(() => {
     if (!availabilityKey) return;
 
     const controller = new AbortController();
     const params = new URLSearchParams({ locationId, startAt, endAt });
+    // When editing, the reservation must not count against its own availability.
+    if (reservationId) params.set("excludeReservationId", reservationId);
 
     // The date-time control emits a value as soon as the hour is picked, but the user may
     // still be choosing minutes, so wait for the value to settle before querying.
@@ -109,7 +128,7 @@ export function CreateReservationForm({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [availabilityKey, locationId, startAt, endAt]);
+  }, [availabilityKey, locationId, startAt, endAt, reservationId]);
 
   const availableQuantities =
     availability && availability.key === availabilityKey
@@ -120,16 +139,23 @@ export function CreateReservationForm({
     setServerError(null);
 
     try {
-      const response = await fetch("/api/reservations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(input),
-      });
+      const response = await fetch(
+        reservation ? `/api/reservations/${reservation.id}` : "/api/reservations",
+        {
+          method: reservation ? "PUT" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        },
+      );
       const body = (await response.json()) as ApiErrorBody;
 
       if (!response.ok) {
         setServerError({
-          message: body.error ?? "The reservation could not be created.",
+          message:
+            body.error ??
+            (isEdit
+              ? "The reservation could not be saved."
+              : "The reservation could not be created."),
           conflict: body.code === "INSUFFICIENT_AVAILABILITY",
         });
         return;
@@ -148,7 +174,7 @@ export function CreateReservationForm({
   if (locations.length === 0) {
     return (
       <Alert severity="info">
-        No locations are configured yet, so a reservation cannot be created.
+        No locations are configured yet, so a reservation cannot be saved.
       </Alert>
     );
   }
@@ -157,7 +183,7 @@ export function CreateReservationForm({
     <form
       onSubmit={handleSubmit(onSubmit)}
       noValidate
-      aria-label="Create reservation"
+      aria-label={isEdit ? "Edit reservation" : "Create reservation"}
     >
       <Stack spacing={3}>
         {serverError ? (
@@ -208,7 +234,7 @@ export function CreateReservationForm({
             helperText={errors.startAt?.message ?? "UTC"}
             slotProps={{
               inputLabel: { shrink: true },
-              htmlInput: { min: now, max: endAt || undefined },
+              htmlInput: { min: startMin, max: endAt || undefined },
             }}
           />
           <TextField
@@ -361,7 +387,7 @@ export function CreateReservationForm({
             Cancel
           </Button>
           <Button type="submit" variant="contained" disabled={isSubmitting}>
-            {isSubmitting ? "Saving…" : "Create reservation"}
+            {isSubmitting ? "Saving…" : isEdit ? "Save changes" : "Create reservation"}
           </Button>
         </Stack>
       </Stack>

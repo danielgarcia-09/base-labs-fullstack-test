@@ -17,7 +17,12 @@ export async function GET(request: Request): Promise<NextResponse> {
   }
 
   try {
-    const availability = await listAvailability({ locationId, startAt, endAt });
+    const availability = await listAvailability({
+      locationId,
+      startAt,
+      endAt,
+      excludeReservationId: params.get("excludeReservationId") ?? undefined,
+    });
     return NextResponse.json({ availability });
   } catch (error: unknown) {
     if (error instanceof DomainError) {

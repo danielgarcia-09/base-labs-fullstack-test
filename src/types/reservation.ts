@@ -10,6 +10,16 @@ export interface LocationOption {
   }>;
 }
 
+/** A reservation as the form edits it; times are UTC "YYYY-MM-DDTHH:mm" strings. */
+export interface ReservationEditValues {
+  id: string;
+  locationId: string;
+  startAt: string;
+  endAt: string;
+  status: ReservationStatusValue;
+  items: Array<{ equipmentId: string; quantity: number }>;
+}
+
 export interface ReservationListItem {
   id: string;
   locationName: string;

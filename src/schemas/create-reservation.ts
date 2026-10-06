@@ -28,41 +28,57 @@ export const reservationItemSchema = z.object({
     .positive("Quantity must be greater than zero."),
 });
 
-export const createReservationSchema = z
-  .object({
-    locationId: z.string().min(1, "Select a location."),
-    startAt: dateTimeField("Start time"),
-    endAt: dateTimeField("End time"),
-    status: z.enum(["DRAFT", "CONFIRMED"]),
-    items: z.array(reservationItemSchema).min(1, "Add at least one equipment item."),
-  })
-  .superRefine((value, ctx) => {
-    const startAt = parseUtcDateTime(value.startAt);
-    const endAt = parseUtcDateTime(value.endAt);
+const reservationFieldsSchema = z.object({
+  locationId: z.string().min(1, "Select a location."),
+  startAt: dateTimeField("Start time"),
+  endAt: dateTimeField("End time"),
+  status: z.enum(["DRAFT", "CONFIRMED"]),
+  items: z.array(reservationItemSchema).min(1, "Add at least one equipment item."),
+});
 
-    // Compare against the current minute: pickers only have minute precision.
-    const currentMinute = new Date();
-    currentMinute.setUTCSeconds(0, 0);
+type ReservationFields = z.infer<typeof reservationFieldsSchema>;
+type AddIssue = (path: Array<string | number>, message: string) => void;
 
-    if (startAt < currentMinute) {
-      ctx.addIssue({ code: "custom", path: ["startAt"], message: "Start time cannot be in the past." });
+function validateReservation(value: ReservationFields, addIssue: AddIssue, options: { allowPastStart: boolean }) {
+  const startAt = parseUtcDateTime(value.startAt);
+  const endAt = parseUtcDateTime(value.endAt);
+
+  // Compare against the current minute: pickers only have minute precision.
+  const currentMinute = new Date();
+  currentMinute.setUTCSeconds(0, 0);
+
+  if (!options.allowPastStart && startAt < currentMinute) {
+    addIssue(["startAt"], "Start time cannot be in the past.");
+  }
+
+  if (endAt <= startAt) {
+    addIssue(["endAt"], "End time must be after start time.");
+  }
+
+  const seen = new Set<string>();
+  value.items.forEach((item, index) => {
+    if (item.equipmentId && seen.has(item.equipmentId)) {
+      addIssue(["items", index, "equipmentId"], "Each equipment type can only be added once.");
     }
-
-    if (endAt <= startAt) {
-      ctx.addIssue({ code: "custom", path: ["endAt"], message: "End time must be after start time." });
-    }
-
-    const seen = new Set<string>();
-    value.items.forEach((item, index) => {
-      if (item.equipmentId && seen.has(item.equipmentId)) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["items", index, "equipmentId"],
-          message: "Each equipment type can only be added once.",
-        });
-      }
-      seen.add(item.equipmentId);
-    });
+    seen.add(item.equipmentId);
   });
+}
+
+export const createReservationSchema = reservationFieldsSchema.superRefine((value, ctx) =>
+  validateReservation(value, (path, message) => ctx.addIssue({ code: "custom", path, message }), {
+    allowPastStart: false,
+  }),
+);
+
+/**
+ * Editing may keep a start time that has already passed (for example to change the
+ * status of a reservation in progress). The server rejects a *changed* start in the past.
+ */
+export const updateReservationSchema = reservationFieldsSchema.superRefine((value, ctx) =>
+  validateReservation(value, (path, message) => ctx.addIssue({ code: "custom", path, message }), {
+    allowPastStart: true,
+  }),
+);
 
 export type CreateReservationInput = z.infer<typeof createReservationSchema>;
+export type UpdateReservationInput = z.infer<typeof updateReservationSchema>;
